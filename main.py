@@ -39,7 +39,24 @@ def verificaHost(url):
 def tamanho_url(url):
   return len(url)
 
+def letter_count(url):
+    letters = 0
+    for i in url:
+        if i.isalpha():
+            letters = letters + 1
+    return letters
 
+def digit_count(url):
+    digits = 0
+    for i in url:
+        if i.isnumeric():
+            digits = digits + 1
+    return digits
+
+
+data['quanti_inteiros']= data['url'].apply(lambda i: digit_count(i))
+
+data['quanti_caracter']= data['url'].apply(lambda i: letter_count(i))
 
 data['possui_host'] = data['url'].apply(lambda i: verificaHost(i))
 
