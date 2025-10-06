@@ -1,35 +1,23 @@
 import pandas as pd
-
-
+import seaborn as sns
+import matplotlib.pyplot as plt
+from urllib.parse import urlparse
+import joblib
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier,GradientBoostingClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.metrics import classification_report, confusion_matrix
+from imblearn.over_sampling import SMOTE
+from collections import Counter
+from sklearn.preprocessing import StandardScaler
 
 file_id = "1NezeELUkV621IkStglimCZORjlEKTKxH"
 url = f"https://drive.google.com/uc?id={file_id}"
 
 data = pd.read_csv(url)
-data.tail()
 
-data.isnull().sum()
-
-data.type.value_counts()
-
-rem = {"Category": {"benign": 0, "defacement": 1, "phishing":2, "malware":3}}
-data['Category'] = data['type']
-data = data.replace(rem)
-
-
-# 0 não possuí e 1 possuí
-data["possui_simbolos"] = data["url"].str.contains(r"[^a-zA-Z0-9:/.\-]", regex=True).astype(int)
-
-feature = ['@','?','-','=','.','#','%','+','$','!','*',',','//']
-for a in feature:
-    data[a] = data['url'].apply(lambda i: i.count(a))
-
-
-data["https"] = data["url"].str.startswith("https://").astype(int)
-
-from urllib.parse import urlparse
-
-
+#Funções
 def verificaHost(url):
   host = urlparse(url).hostname
   if (host):
@@ -53,55 +41,78 @@ def digit_count(url):
             digits = digits + 1
     return digits
 
-
-data['quanti_inteiros']= data['url'].apply(lambda i: digit_count(i))
-
-data['quanti_caracter']= data['url'].apply(lambda i: letter_count(i))
-
-data['possui_host'] = data['url'].apply(lambda i: verificaHost(i))
-
-data['tamanho_url'] = data["url"].apply(lambda i:tamanho_url(i))
-
-data.head()
-
-
 #Tratar outliers
-antes = len(data)
-Q1 = data['tamanho_url'].quantile(0.25)
-Q3 = data['tamanho_url'].quantile(0.75)
-IQR = Q3 - Q1
+def trataOutlier(data):
+    antes = len(data)
+    Q1 = data['tamanho_url'].quantile(0.25)
+    Q3 = data['tamanho_url'].quantile(0.75)
+    IQR = Q3 - Q1
 
-limite_inferior = Q1 - 1.5 * IQR
-limite_superior = Q3 + 1.5 * IQR
+    limite_inferior = Q1 - 1.5 * IQR
+    limite_superior = Q3 + 1.5 * IQR
 
-data = data[(data['tamanho_url'] >= limite_inferior) & (data['tamanho_url'] <= limite_superior)]
+    data = data[(data['tamanho_url'] >= limite_inferior) & (data['tamanho_url'] <= limite_superior)]
+    depois = len(data)
 
-depois = len(data)
+    # verificar se houve alteração
+    if antes != depois:
+        print(f"Foram removidos {antes - depois} registros.")
+    else:
+        print("Nenhum dado foi alterado/removido.")
+    return data
 
-# verificar se houve alteração
-if antes != depois:
-    print(f"Foram removidos {antes - depois} registros.")
-else:
-    print("Nenhum dado foi alterado/removido.")
+counts = data.type.value_counts()
+counts_df = counts.reset_index()
+counts_df.columns = ['type', 'count']
 
-    data = data.dropna(subset=["Category"])
+plt.figure(figsize=(7,5))
+sns.barplot(data=counts_df, x='type', y='count', palette='pastel')
 
-X = data.drop(["url","type","Category"], axis=1)
-y = data["Category"]
+plt.title('Quantidade de tipos')
+plt.xlabel('Tipo')
+plt.ylabel('Quantidade')
+plt.grid(axis='y')
+plt.tight_layout()
+plt.show()
 
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
-from sklearn.metrics import classification_report, confusion_matrix
-import joblib
+rem = {"Categoria": {"benign": 0, "defacement": 1, "phishing":2, "malware":3}}
+data['Categoria'] = data['type']
+data = data.replace(rem)
 
+data["possui_simbolos"] = data["url"].str.contains(r"[^a-zA-Z0-9:/.\-]", regex=True).astype(int)
 
-# Separar treino e teste
+feature = ['@','?','-','=','.','#','%','+','$','!','*',',','//']
+for a in feature:
+    data[a] = data['url'].apply(lambda i: i.count(a))
+
+data["https"] = data["url"].str.startswith("https://").astype(int)
+data['possui_host'] = data['url'].apply(lambda i: verificaHost(i))
+data['tamanho_url'] = data["url"].apply(lambda i:tamanho_url(i))
+data['quanti_inteiros']= data['url'].apply(lambda i: digit_count(i))
+data['quanti_caracter']= data['url'].apply(lambda i: letter_count(i))
+data = trataOutlier(data)
+
+data = data.dropna(subset=["Categoria"])
+X = data.drop(["url","type","Categoria"], axis=1)
+y = data["Categoria"]
+
+feature_columns = X.columns.tolist()
+joblib.dump(feature_columns, "features_lista.pkl")
+print("\nLista de features salva como: features_lista.pkl\n")
+
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.3, random_state=42
 )
 
+print("\nDistribuição original no treino:", Counter(y_train))
+smote = SMOTE(random_state=42)
+X_train_res, y_train_res = smote.fit_resample(X_train, y_train)
+
+print("\nDistribuição após SMOTE:", Counter(y_train_res))
+
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train_res)
+X_test_scaled = scaler.transform(X_test)
 
 modelos = {
     "RandomForest": RandomForestClassifier(n_estimators=100, random_state=42),
@@ -109,15 +120,25 @@ modelos = {
     "LogisticRegression": LogisticRegression(max_iter=1000),
     "SVM": SVC()
 }
+labels = ["benign", "defacement", "phishing", "malware"]
 
-# Loop para treinar, prever e avaliar cada modelo
 for nome, modelo in modelos.items():
-    modelo.fit(X_train, y_train)
-    y_pred = modelo.predict(X_test)
+    if nome in ["LogisticRegression", "SVM"]:
+        modelo.fit(X_train_scaled, y_train_res)
+        y_pred = modelo.predict(X_test_scaled)
+    else:
+        modelo.fit(X_train_res, y_train_res)
+        y_pred = modelo.predict(X_test)
 
-    print(f"\n--- Modelo: {nome} ---")
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, y_pred))
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(6, 4))
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
+                xticklabels=labels, yticklabels=labels)
+    plt.xlabel("Predito")
+    plt.ylabel("Real")
+    plt.title(f"Matriz de Confusão - {nome}")
+    plt.show()
+
     print("\nClassification Report:")
     print(classification_report(y_test, y_pred))
 
