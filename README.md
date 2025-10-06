@@ -8,13 +8,12 @@ python -m venv venv
 ### 2- ATIVAR O AMBIENTE VIRTUAL
 ```bash
 venv\Scripts\activate
-
-### - INSTALAR DEPENDÊNCIAS DE UM REQUIRIMENT
+````
+### 3- INSTALAR DEPENDÊNCIAS DO REQUIRIMENT
 ```bash
 pip install -r requirements.txt
 ```
-
-### - RODAR PROJETO PELO CMD DENTRO DO VENV
+### 4- RODAR PROJETO PELO CMD DENTRO DO VENV
 ```bash
 python main.py
 ```
